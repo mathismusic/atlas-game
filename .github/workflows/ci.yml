@@ -29,31 +29,47 @@ jobs:
     name: glibc build and tests
     runs-on: ubuntu-latest
     container: swift:6.3.2-noble
+
+    # A job that runs in a container does not get the runner's bash: the step
+    # script is handed to whatever `sh` the image provides, which on Ubuntu is
+    # dash.  Dash has no `set -o pipefail` and exits 2 the instant it sees one,
+    # before a single line of the script runs — which is how a Test step managed
+    # to "fail" in zero seconds with nothing to say for itself.
+    defaults:
+      run:
+        shell: bash
+
     steps:
       - uses: actions/checkout@v4
 
-      # Release, not debug: the container builds release, and the optimiser is
-      # a second reader of the code.
-      - name: Build
-        run: swift build -c release --product atlas
+      # Debug, not release: this job exists to *run* the suite, and the image
+      # job below already compiles the server for release through the real
+      # Dockerfile.  Building it twice only delays the answer.
+      #
+      # Building the tests is its own step so that a compile error in the test
+      # sources — which no other job compiles at all — is not mistaken for a
+      # failing assertion.
+      - name: Build the tests
+        run: swift build --product atlastests
 
       # 193 tests / 46,049 assertions.  They pass on macOS on every commit; what
       # this proves is that they pass on the platform nobody plays on but
       # everybody is served from.
-      #
-      # The failing lines are echoed back as `::error::` workflow commands as
-      # well as printed.  A job's log needs a token to read, but the annotations
-      # those commands raise are on the public checks API — so whoever is
-      # fixing this can see *what* failed without having to be logged in.
       - name: Test
+        run: swift run atlastests 2>&1 | tee /tmp/tests.log
+
+      # A job's log needs a token to read.  Annotations and the run summary do
+      # not, so whatever failed is echoed into both — otherwise a red tick is
+      # all anyone outside the repo can see.
+      - name: Say what broke
+        if: failure()
         run: |
-          set -o pipefail
-          swift run atlastests 2>&1 | tee /tmp/tests.log || {
-            lines=$(grep -a "✗" /tmp/tests.log | head -12)
-            [ -n "$lines" ] || lines=$(tail -25 /tmp/tests.log)
-            echo "::error::$(printf '%s' "$lines" | sed 's/$/%0A/' | tr -d '\n')"
-            exit 1
-          }
+          lines=$(grep -a "✗" /tmp/tests.log | head -10)
+          [ -n "$lines" ] || lines=$(tail -30 /tmp/tests.log)
+          printf '## Failures\n\n```\n%s\n```\n' "$lines" >> "$GITHUB_STEP_SUMMARY"
+          while IFS= read -r line; do
+            [ -n "$line" ] && echo "::error::$line"
+          done <<< "$lines"
 
   image:
     name: container builds and serves

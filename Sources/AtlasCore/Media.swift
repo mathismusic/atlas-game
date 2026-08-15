@@ -408,14 +408,29 @@ public final class MediaLibrary: @unchecked Sendable {
         lock.unlock()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys]
-        guard let data = try? encoder.encode(snapshot) else { return false }
+        guard let data = try? encoder.encode(snapshot) else {
+            lock.lock(); dirty = true; lock.unlock()
+            return false
+        }
         try? FileManager.default.createDirectory(
             at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
         // Write beside and rename: a harvester killed mid-write must not leave
-        // half a file where five thousand facts used to be.
-        let temporary = url.appendingPathExtension("tmp")
-        guard (try? data.write(to: temporary)) != nil else { return false }
-        _ = try? FileManager.default.replaceItemAt(url, withItemAt: temporary)
+        // half a file where five thousand facts used to be.  `.atomic` is that
+        // rename, and it is the same thing the learned-places file does.
+        //
+        // It used to be a hand-rolled `replaceItemAt`, which is the sort of
+        // thing that works on a Mac and quietly does not on Linux, where it
+        // fails outright if the destination does not exist yet.  Every `save`
+        // to a fresh file therefore wrote `media.json.tmp`, never `media.json`,
+        // and returned `true` — so a deployed server would have forgotten every
+        // picture it harvested and every place it was taught, without a word.
+        do {
+            try data.write(to: url, options: .atomic)
+        } catch {
+            // Say so, and stay dirty, so the next save tries again.
+            lock.lock(); dirty = true; lock.unlock()
+            return false
+        }
         return true
     }
 

@@ -370,10 +370,27 @@ enum MediaTests {
                                             source: "https://en.wikipedia.org/wiki/Aizawl"),
                                  for: "Aizawl")
                 expect(writing.save(), "nothing was written")
+                // Where it says it wrote, and nothing left half-written beside
+                // it: a save that returns true having created only a `.tmp` is
+                // the exact shape of the bug that lost every harvested picture
+                // on Linux while passing here.
+                expect(FileManager.default.fileExists(atPath: url.path),
+                       "save() said yes but there is no file at \(url.path)")
+                expect(!FileManager.default.fileExists(
+                    atPath: url.appendingPathExtension("tmp").path),
+                       "a temporary file was left behind")
                 let reading = MediaLibrary()
                 expectEqual(reading.load(url), 1)
                 expectEqual(reading.media(for: "Aizawl")?.image, "https://x/y.jpg")
                 expectEqual(reading.media(for: "Aizawl")?.width, 320)
+
+                // And again over a file that now exists — creating and
+                // replacing are different code paths underneath.
+                writing.remember(PlaceMedia(name: "Imphal", fact: "Polo began here."),
+                                 for: "Imphal")
+                expect(writing.save(), "the second save wrote nothing")
+                let again = MediaLibrary()
+                expectEqual(again.load(url), 2)
             }
 
             Harness.test("nothing is written when nothing changed") {

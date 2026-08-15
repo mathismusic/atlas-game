@@ -68,13 +68,22 @@ jobs:
           # which is what happens when it was the *build* that failed.  Both
           # halves have to tolerate the file being absent.
           touch /tmp/tests.log
-          lines=$(grep -a "✗" /tmp/tests.log | head -10 || true)
+          # The harness ends with a block listing each failure, its message and
+          # its file:line — which is the part worth reading.  Falling back to a
+          # bare list of ✗ names gives you a name and nothing to act on.
+          lines=$(sed -n '/[0-9][0-9]* failures/,$p' /tmp/tests.log | head -60 || true)
           [ -n "$lines" ] || lines=$(tail -30 /tmp/tests.log || true)
           [ -n "$lines" ] || lines="the build failed before any test ran"
           printf '## Failures\n\n```\n%s\n```\n' "$lines" >> "$GITHUB_STEP_SUMMARY"
-          while IFS= read -r line; do
-            [ -n "$line" ] && echo "::error::$line"
-          done <<< "$lines"
+          # One annotation per failure, not per line: a message and its location
+          # belong together, and GitHub shows only the first ten.
+          printf '%s\n' "$lines" | awk '
+            /· / { if (n) print buf; buf = $0; n = 1; next }
+            n && NF { buf = buf " — " $0 }
+            END { if (n) print buf }
+          ' | head -10 | while IFS= read -r entry; do
+            [ -n "$entry" ] && echo "::error::$entry"
+          done
 
   image:
     name: container builds and serves

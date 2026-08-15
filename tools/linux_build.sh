@@ -46,10 +46,20 @@ fi
 
 # A scratch path of its own: sharing .build with the Mac build makes the two
 # fight over the same `release` symlink, and the test sweep runs from it.
+#
+# The test runner is built too, and for a reason that cost a deploy to learn:
+# the Dockerfile builds only `--product atlas`, so the test sources were the one
+# part of this repository that nothing had ever compiled for Linux.  They did
+# not compile — `ServerTests` opens a raw socket, and off Darwin `import
+# Foundation` no longer hands you the C library that declares one.  Musl cannot
+# see the *type* differences glibc has, but it sees a missing import perfectly
+# well, and it sees it here in two minutes instead of ten in CI.
 for arch in x86_64 aarch64; do
   echo "=== $arch ==="
-  $SWIFT build -c release --product atlas \
-    --swift-sdk "${arch}-swift-linux-musl" \
-    --scratch-path /tmp/atlas-linux
+  for product in atlas atlastests; do
+    $SWIFT build -c release --product $product \
+      --swift-sdk "${arch}-swift-linux-musl" \
+      --scratch-path /tmp/atlas-linux
+  done
   file "/tmp/atlas-linux/${arch}-swift-linux-musl/release/atlas"
 done

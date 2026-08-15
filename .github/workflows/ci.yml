@@ -64,8 +64,13 @@ jobs:
       - name: Say what broke
         if: failure()
         run: |
-          lines=$(grep -a "✗" /tmp/tests.log | head -10)
-          [ -n "$lines" ] || lines=$(tail -30 /tmp/tests.log)
+          # `set -e` is on, and grep exits 2 on a log that was never written —
+          # which is what happens when it was the *build* that failed.  Both
+          # halves have to tolerate the file being absent.
+          touch /tmp/tests.log
+          lines=$(grep -a "✗" /tmp/tests.log | head -10 || true)
+          [ -n "$lines" ] || lines=$(tail -30 /tmp/tests.log || true)
+          [ -n "$lines" ] || lines="the build failed before any test ran"
           printf '## Failures\n\n```\n%s\n```\n' "$lines" >> "$GITHUB_STEP_SUMMARY"
           while IFS= read -r line; do
             [ -n "$line" ] && echo "::error::$line"

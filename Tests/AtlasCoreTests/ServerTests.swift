@@ -2,6 +2,25 @@ import Foundation
 import AtlasCore
 import AtlasServer
 
+// The raw socket further down needs the C library by name.  On Darwin `import
+// Foundation` re-exports it and this line looks unnecessary; off Darwin it does
+// not, and every one of `socket`, `sockaddr_in` and `connect` is undefined.
+// That is why this file compiled here for the whole of its life while being
+// unbuildable on the platform the server is deployed to.
+#if canImport(Darwin)
+import Darwin
+#elseif canImport(Musl)
+import Musl
+#elseif canImport(Glibc)
+import Glibc
+#endif
+
+// And URLSession lives in a module of its own there, exactly as it does in
+// `Verifier` and `Media` — the tests talk to the server over HTTP too.
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
+
 /// Boots a real server on a spare port and talks to it over a real socket, so
 /// the HTTP parser, the router and the room bookkeeping are all under test.
 /// `tools/e2e.py` covers the same ground against a long-running server; this
@@ -444,6 +463,11 @@ enum ServerTests {
     }
 }
 
+/// The C `close`, captured at file scope where nothing shadows it.  `DeafClient`
+/// has a `close()` of its own, so the call inside it has to name something else
+/// — and naming `Darwin.close` names a module that only exists on a Mac.
+private let closeFD = close
+
 /// A client that asks for the event stream and then never reads a byte of it,
 /// with a receive buffer small enough that the server notices quickly.
 private final class DeafClient {
@@ -464,16 +488,16 @@ private final class DeafClient {
                 connect(fd, $0, socklen_t(MemoryLayout<sockaddr_in>.size))
             }
         }
-        guard connected >= 0 else { Darwin.close(fd); return nil }
+        guard connected >= 0 else { _ = closeFD(fd); return nil }
 
         let request = "GET \(path) HTTP/1.1\r\nHost: localhost\r\n\r\n"
         let sent = Array(request.utf8).withUnsafeBufferPointer {
             write(fd, $0.baseAddress, $0.count)
         }
-        guard sent > 0 else { Darwin.close(fd); return nil }
+        guard sent > 0 else { _ = closeFD(fd); return nil }
     }
 
-    func close() { Darwin.close(fd) }
+    func close() { _ = closeFD(fd) }
 }
 
 /// Collects an SSE body as it streams in.

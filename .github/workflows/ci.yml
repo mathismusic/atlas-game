@@ -1,0 +1,89 @@
+# Continuous integration, whose real job is to build on glibc.
+#
+# Nothing on the development Mac can do that.  There is no Docker here, and the
+# only cross-compiler available — the swift.org static Linux SDK behind
+# `tools/linux_build.sh` — is musl.  Musl and glibc import the C socket
+# constants at different Swift types, so a musl build can be perfectly green
+# while the deployed container refuses to compile, which is precisely what
+# happened on the first deploy to Render.
+#
+# Two jobs, run in parallel:
+#
+#   linux  the fast answer — compile for release and run the whole suite on the
+#          same image the container's build stage uses.
+#   image  the honest answer — build the actual Dockerfile and ask the running
+#          container for its health, which covers the half a compiler cannot
+#          see: the runtime stage, the copied web client, and whether the
+#          shipped pictures are really inside the image.
+
+name: build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  linux:
+    name: glibc build and tests
+    runs-on: ubuntu-latest
+    container: swift:6.3.2-noble
+    steps:
+      - uses: actions/checkout@v4
+
+      # Release, not debug: the container builds release, and the optimiser is
+      # a second reader of the code.
+      - name: Build
+        run: swift build -c release --product atlas
+
+      # 193 tests / 46,049 assertions.  They pass on macOS on every commit; what
+      # this proves is that they pass on the platform nobody plays on but
+      # everybody is served from.
+      - name: Test
+        run: swift run atlastests
+
+  image:
+    name: container builds and serves
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t atlas .
+
+      # A container that compiles and then fails to answer is the failure mode
+      # a compiler cannot catch: a binary bound to localhost instead of the
+      # interface, a missing Public directory, a media file that never got
+      # copied.  Starting it and reading /api/health catches all three.
+      - name: Start it
+        run: docker run -d --name atlas -p 8080:8080 atlas
+
+      - name: Wait for it to answer
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://localhost:8080/api/health > /tmp/health; then
+              cat /tmp/health; exit 0
+            fi
+            sleep 2
+          done
+          echo "no health response after 60s"; docker logs atlas; exit 1
+
+      # The atlas is compiled into the binary and the pictures are baked into
+      # the image, so a container that comes up with either of them empty has
+      # been built wrong even though every earlier step was green.
+      - name: Check it came up complete
+        run: |
+          places=$(curl -fsS http://localhost:8080/api/health | grep -o '"places":[0-9]*' | cut -d: -f2)
+          echo "places: $places"
+          [ "$places" -gt 5000 ] || { echo "the atlas did not load"; docker logs atlas; exit 1; }
+          pictured=$(curl -fsS http://localhost:8080/api/atlas | grep -o '"pictured":[0-9]*' | cut -d: -f2)
+          echo "pictured: $pictured"
+          [ "$pictured" -gt 4000 ] || { echo "the shipped pictures are missing"; exit 1; }
+
+      - name: Play a game through the HTTP surface
+        run: python3 tools/e2e.py --base http://localhost:8080
+
+      - name: Logs, whatever happened
+        if: always()
+        run: docker logs atlas

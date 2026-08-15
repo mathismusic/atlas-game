@@ -18,6 +18,27 @@ import Glibc
 /// is the part that differs between Darwin, Glibc and Musl.
 let closeSocket = close
 
+// The three socket constants whose *Swift type* differs by platform, pinned to
+// Int32 once here so that no call site has to know.
+//
+// The C libraries agree on the values and disagree on how Swift imports them:
+// Glibc hands `SOCK_STREAM` over as a `__socket_type` struct, and `SHUT_RDWR`
+// and `IPPROTO_TCP` as `Int`, where Darwin and Musl give all three as `Int32`.
+// The rest — `AF_INET`, `SOL_SOCKET`, `TCP_NODELAY`, the timeout options —
+// import as `Int32` everywhere and are left alone.
+//
+// This is precisely the gap `tools/linux_build.sh` cannot see: the static Linux
+// SDK is musl, so a clean cross-compile proves the Musl path and says nothing
+// about the Glibc one the deployed container is actually built on.  These lines
+// are the difference between a green build here and a failed deploy there.
+#if canImport(Glibc)
+public let streamSocket = Int32(SOCK_STREAM.rawValue)
+#else
+public let streamSocket = Int32(SOCK_STREAM)
+#endif
+public let shutdownBoth = Int32(SHUT_RDWR)
+public let tcpProtocol = Int32(IPPROTO_TCP)
+
 public struct HTTPRequest: Sendable {
     public var method: String
     public var path: String
@@ -167,7 +188,7 @@ public final class HTTPConnection: @unchecked Sendable {
         let wasClosed = closed
         closed = true
         writeLock.unlock()
-        if !wasClosed { shutdown(fd, SHUT_RDWR) }
+        if !wasClosed { shutdown(fd, shutdownBoth) }
         _ = closeSocket(fd)
     }
 
@@ -214,7 +235,7 @@ public final class HTTPServer: @unchecked Sendable {
     public func start(host: String, port: UInt16) throws {
         signal(SIGPIPE, SIG_IGN)
 
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        let fd = socket(AF_INET, streamSocket, 0)
         guard fd >= 0 else { throw HTTPServerError.socketFailed(String(cString: strerror(errno))) }
         var yes: Int32 = 1
         setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &yes, socklen_t(MemoryLayout<Int32>.size))
@@ -247,7 +268,7 @@ public final class HTTPServer: @unchecked Sendable {
 
     public func stop() {
         running = false
-        if listenFD >= 0 { shutdown(listenFD, SHUT_RDWR); close(listenFD); listenFD = -1 }
+        if listenFD >= 0 { shutdown(listenFD, shutdownBoth); close(listenFD); listenFD = -1 }
     }
 
     private func acceptLoop(_ fd: Int32) {
@@ -261,7 +282,7 @@ public final class HTTPServer: @unchecked Sendable {
                 continue
             }
             var one: Int32 = 1
-            setsockopt(client, IPPROTO_TCP, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
+            setsockopt(client, tcpProtocol, TCP_NODELAY, &one, socklen_t(MemoryLayout<Int32>.size))
             queue.async { [weak self] in self?.serve(client) }
         }
     }

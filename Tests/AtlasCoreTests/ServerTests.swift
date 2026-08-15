@@ -450,7 +450,7 @@ private final class DeafClient {
     private let fd: Int32
 
     init?(port: UInt16, path: String) {
-        fd = socket(AF_INET, SOCK_STREAM, 0)
+        fd = socket(AF_INET, streamSocket, 0)
         guard fd >= 0 else { return nil }
         var small: Int32 = 2048
         setsockopt(fd, SOL_SOCKET, SO_RCVBUF, &small, socklen_t(MemoryLayout<Int32>.size))

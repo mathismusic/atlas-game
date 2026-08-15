@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Atlas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1, user-scalable=no">
+<meta name="theme-color" content="#0d1117">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Atlas">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon.png">
+<link rel="icon" href="/icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+
+<div id="app">
+
+  <!-- ───────────────────────────── home ───────────────────────────── -->
+  <section class="screen" id="screen-home">
+    <div class="brand">
+      <div class="globe" aria-hidden="true">🌍</div>
+      <h1>ATLAS</h1>
+      <p class="tagline">Name a place. The next player starts with your last letter.</p>
+    </div>
+
+    <label class="field">
+      <span>Your name</span>
+      <input id="input-name" type="text" maxlength="18" autocomplete="nickname"
+             autocapitalize="words" placeholder="Player">
+    </label>
+
+    <div class="stack">
+      <button class="btn primary" id="btn-quick">Play the computer</button>
+      <button class="btn" id="btn-create">Create a table</button>
+      <div class="joinrow">
+        <input id="input-code" type="text" maxlength="6" placeholder="CODE"
+               autocapitalize="characters" autocorrect="off" spellcheck="false"
+               aria-label="Table code">
+        <button class="btn" id="btn-join">Join</button>
+      </div>
+    </div>
+
+    <div class="modes" id="opt-modes" role="radiogroup" aria-label="Table"></div>
+
+    <details class="options">
+      <summary>Options</summary>
+      <label class="field row">
+        <span>Computer strength</span>
+        <select id="opt-difficulty">
+          <option value="easy">Easy — countries &amp; capitals</option>
+          <option value="medium" selected>Medium</option>
+          <option value="hard">Hard — knows everything</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Opponents</span>
+        <select id="opt-bots">
+          <option value="1" selected>1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+          <option value="4">4</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Seconds per turn</span>
+        <select id="opt-turn">
+          <option value="" selected>As the table says</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="45">45</option>
+          <option value="60">60</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Lives</span>
+        <select id="opt-lives">
+          <option value="" selected>As the table says</option>
+          <option value="1">1</option>
+          <option value="2">2</option>
+          <option value="3">3</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Cards</span>
+        <select id="opt-cards">
+          <option value="">As the table says</option>
+          <option value="0">Off</option>
+          <option value="0.45">Sometimes</option>
+          <option value="1">Every turn</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Cards are rules</span>
+        <select id="opt-forced">
+          <option value="">As the table says</option>
+          <option value="0">No — bonus points only</option>
+          <option value="1">Yes — must be obeyed</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Card difficulty</span>
+        <select id="opt-tiers">
+          <option value="">As the table says</option>
+          <option value="easy">Gentle</option>
+          <option value="easy,medium">Mixed</option>
+          <option value="easy,medium,hard">Everything</option>
+          <option value="hard">Hard only</option>
+        </select>
+      </label>
+      <label class="field row">
+        <span>Clock tightens</span>
+        <select id="opt-decay">
+          <option value="">As the table says</option>
+          <option value="0">Never</option>
+          <option value="0.3">Slowly</option>
+          <option value="0.75">Fast</option>
+        </select>
+      </label>
+    </details>
+
+    <p class="footnote" id="home-footnote"></p>
+  </section>
+
+  <!-- ───────────────────────────── lobby ──────────────────────────── -->
+  <section class="screen" id="screen-lobby" hidden>
+    <header class="bar">
+      <button class="icon" id="btn-lobby-back" aria-label="Leave">←</button>
+      <div class="code-block">
+        <span class="label">Table code</span>
+        <strong id="lobby-code">····</strong>
+      </div>
+      <button class="icon" id="btn-share" aria-label="Share link">⇪</button>
+    </header>
+
+    <p class="hint" id="lobby-hint">Others join from the home screen with this code.</p>
+
+    <ul class="roster" id="lobby-roster"></ul>
+
+    <div class="stack" id="lobby-host-controls">
+      <div class="btnrow">
+        <button class="btn small" data-add-bot="easy">+ Easy bot</button>
+        <button class="btn small" data-add-bot="medium">+ Medium</button>
+        <button class="btn small" data-add-bot="hard">+ Hard</button>
+      </div>
+      <button class="btn primary" id="btn-start">Start game</button>
+    </div>
+    <p class="hint" id="lobby-wait" hidden>Waiting for the host to start…</p>
+  </section>
+
+  <!-- ───────────────────────────── game ───────────────────────────── -->
+  <section class="screen game" id="screen-game" hidden>
+    <header class="bar">
+      <button class="icon" id="btn-game-back" aria-label="Leave">←</button>
+      <div class="turnbanner"><span id="turn-name">—</span></div>
+      <div class="chaincount" id="chain-count">0</div>
+    </header>
+
+    <div class="players" id="game-players"></div>
+
+    <div class="clockwrap">
+      <svg class="clock" viewBox="0 0 120 120" aria-hidden="true">
+        <circle class="clock-track" cx="60" cy="60" r="52"></circle>
+        <circle class="clock-fill" id="clock-fill" cx="60" cy="60" r="52"></circle>
+      </svg>
+      <div class="clock-centre">
+        <div class="letter" id="required-letter">S</div>
+        <div class="seconds" id="seconds-left">30</div>
+      </div>
+    </div>
+
+    <div class="cardbanner" id="cardbanner" hidden>
+      <span class="tier" id="card-tier">easy</span>
+      <span class="cardtext">
+        <strong id="card-headline"></strong>
+        <span class="demand" id="card-demand"></span>
+      </span>
+      <span class="reward" id="card-reward">×2</span>
+    </div>
+
+    <div class="chainwrap">
+      <div class="chain" id="chain" aria-label="Places played">
+        <div class="chaininner" id="chain-inner"></div>
+      </div>
+      <button class="jump" id="btn-jump" hidden>↓ newest</button>
+    </div>
+
+    <div class="composer" id="composer">
+      <div class="feedback" id="feedback"></div>
+      <div class="inputrow">
+        <input id="input-place" type="text" autocomplete="off" autocorrect="off"
+               autocapitalize="words" spellcheck="false" enterkeyhint="send"
+               placeholder="a place starting with S">
+        <button class="btn primary send" id="btn-send" aria-label="Play">▶</button>
+      </div>
+      <div class="btnrow secondary">
+        <button class="btn small ghost" id="btn-challenge" hidden>🔎 Challenge — look it up</button>
+        <button class="btn small ghost" id="btn-hint">💡 Hint</button>
+        <button class="btn small ghost danger" id="btn-wager" hidden>🎲 Bet a life</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ──────────────────────────── game over ───────────────────────── -->
+  <section class="screen" id="screen-over" hidden>
+    <div class="brand">
+      <div class="globe" id="over-emoji">🏆</div>
+      <h1 id="over-title">Winner</h1>
+      <p class="tagline" id="over-sub"></p>
+    </div>
+    <ul class="scores" id="over-scores"></ul>
+    <div class="chain final" id="over-chain">
+      <div class="chaininner" id="over-chain-inner"></div>
+    </div>
+    <div class="stack">
+      <button class="btn primary" id="btn-again" hidden>Play again</button>
+      <button class="btn" id="btn-home">Back to start</button>
+    </div>
+  </section>
+
+  <div class="toast" id="toast" hidden></div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>

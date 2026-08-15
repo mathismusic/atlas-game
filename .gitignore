@@ -1,0 +1,12 @@
+.build/
+tools/__pycache__/
+tools/browser/
+tools/shots/
+tools/data/
+*.log
+.DS_Store
+.claude/
+
+# The harvested pictures are derived data — rebuilt with `atlas media` — but
+# deploy/media.json is deliberately *not* ignored: the container reads it at
+# boot, and a free-tier disk cannot keep one of its own.

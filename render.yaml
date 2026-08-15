@@ -1,0 +1,22 @@
+# Render blueprint.  Push this repository to GitHub, then on render.com choose
+# New → Blueprint and point it here; everything below is read automatically.
+#
+# The free plan has no persistent disk and stops the container after fifteen
+# minutes without a request, so treat everything the server writes to /data as
+# scratch: the atlas is compiled into the binary and the pictures are baked into
+# the image, which is why a cold start still comes up complete.  What is lost on
+# a restart is the places players taught it by challenge (learned.json).  Paying
+# for the smallest disk, mounted at /data, is what makes those survive.
+services:
+  - type: web
+    name: atlas
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    # Render sets $PORT itself; the server reads it.  Declared here so that the
+    # health check and the router agree with the process.
+    healthCheckPath: /api/health
+    envVars:
+      - key: ATLAS_DATA_DIR
+        value: /data

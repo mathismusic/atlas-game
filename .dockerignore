@@ -1,0 +1,6 @@
+# .build is several gigabytes of object files for the wrong operating system.
+.build/
+tools/browser/
+tools/data/
+*.log
+.DS_Store

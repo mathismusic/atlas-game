@@ -40,8 +40,20 @@ jobs:
       # 193 tests / 46,049 assertions.  They pass on macOS on every commit; what
       # this proves is that they pass on the platform nobody plays on but
       # everybody is served from.
+      #
+      # The failing lines are echoed back as `::error::` workflow commands as
+      # well as printed.  A job's log needs a token to read, but the annotations
+      # those commands raise are on the public checks API — so whoever is
+      # fixing this can see *what* failed without having to be logged in.
       - name: Test
-        run: swift run atlastests
+        run: |
+          set -o pipefail
+          swift run atlastests 2>&1 | tee /tmp/tests.log || {
+            lines=$(grep -a "✗" /tmp/tests.log | head -12)
+            [ -n "$lines" ] || lines=$(tail -25 /tmp/tests.log)
+            echo "::error::$(printf '%s' "$lines" | sed 's/$/%0A/' | tr -d '\n')"
+            exit 1
+          }
 
   image:
     name: container builds and serves
@@ -82,7 +94,14 @@ jobs:
           [ "$pictured" -gt 4000 ] || { echo "the shipped pictures are missing"; exit 1; }
 
       - name: Play a game through the HTTP surface
-        run: python3 tools/e2e.py --base http://localhost:8080
+        run: |
+          set -o pipefail
+          python3 tools/e2e.py --base http://localhost:8080 2>&1 | tee /tmp/e2e.log || {
+            lines=$(grep -a "✗" /tmp/e2e.log | head -12)
+            [ -n "$lines" ] || lines=$(tail -25 /tmp/e2e.log)
+            echo "::error::$(printf '%s' "$lines" | sed 's/$/%0A/' | tr -d '\n')"
+            exit 1
+          }
 
       - name: Logs, whatever happened
         if: always()

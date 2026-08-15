@@ -851,7 +851,22 @@ def test_media():
           "a picture is a URL the browser can load", str(sydney)[:120])
     check(sydney.get("width", 0) > 0 and sydney.get("height", 0) > 0,
           "the picture knows its own shape", str(sydney))
-    check("1,056,006" in sydney.get("fact", ""), "the quirky fact comes through", str(sydney))
+    # Which fact comes back depends on the library the server was started with,
+    # and both answers are right: the seeded fixture says the opera house has
+    # 1,056,006 tiles, a real harvest says something else about Sydney
+    # altogether.  So the shape is what is checked — a fact arrived and it reads
+    # like a finished sentence — and the fixture's exact wording is pinned only
+    # when the fixture is what is being served.  A data: URL for a picture is
+    # what gives that away; a harvest returns an https one.
+    #
+    # The sentence-end check is not decoration.  Rhode Island was served
+    # "Rhode Island is the smallest U.S." for a while, because the splitter took
+    # the stop after an acronym for the end of a sentence.
+    fact = sydney.get("fact", "")
+    check(len(fact) >= 30 and fact.rstrip().endswith((".", "!", "?")),
+          "the quirky fact comes through, and is a whole sentence", str(sydney)[:200])
+    if sydney.get("image", "").startswith("data:"):
+        check("1,056,006" in fact, "the seeded fact comes through word for word", fact)
     check(sydney.get("fact", "") != "", "and it is not the blurb the game already says")
 
     # The name is matched the way the game matches names, not by string equality.

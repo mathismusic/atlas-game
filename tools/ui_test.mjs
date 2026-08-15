@@ -501,8 +501,14 @@ async function testPictures(browser) {
   check(fetched !== null, 'the page fetches a picture from the server',
         JSON.stringify(fetched));
   if (fetched) {
-    check(/1,056,006/.test(fetched.fact || ''), 'and gets the quirky fact with it',
-          String(fetched.fact).slice(0, 80));
+    // Against the seeded fixture the wording is known and pinned; against a
+    // server holding a real harvest, Sydney's fact is something else entirely
+    // and what matters is that a whole sentence arrived.  A data: URL for the
+    // picture is what tells the two apart.
+    const fact = String(fetched.fact || '');
+    const seeded = String(fetched.image || '').startsWith('data:');
+    check(seeded ? /1,056,006/.test(fact) : /^.{30,}[.!?]$/.test(fact.trim()),
+          'and gets the quirky fact with it', fact.slice(0, 80));
   }
 
   // Put it on a real row, through the real render path: play a place, then let
@@ -525,7 +531,21 @@ async function testPictures(browser) {
     chain.scrollTop = chain.scrollHeight;         // reading the newest place…
     chain.dispatchEvent(new Event('scroll'));
     await frame();
-    const before = document.querySelectorAll('#chain .play img.shot').length;
+
+    // Start the row bare, whatever the server happens to know.  Against the
+    // seeded fixture the newest place has no record and this changes nothing;
+    // against a server holding a real harvest it already has a photograph, and
+    // a test that assumed otherwise was measuring the picture it began with.
+    // The key goes into `mediaAsked` so the render does not simply fetch it
+    // back before the count is taken.
+    const key = newest.text.trim().toLowerCase();
+    app.media.delete(key);
+    app.mediaAsked.add(key);
+    renderChain(chain, inner);
+    await frame();
+    // Counted on that row alone: on a server with a real library every other
+    // row in the chain has a photograph of its own.
+    const before = inner.lastElementChild.querySelectorAll('img.shot').length;
 
     // …and its photograph arrives a few seconds after it was played.
     app.media.set(newest.text.trim().toLowerCase(), {
@@ -545,7 +565,7 @@ async function testPictures(browser) {
     const box = shot ? shot.getBoundingClientRect() : null;
     return {
       before,
-      after: document.querySelectorAll('#chain .play img.shot').length,
+      after: row.querySelectorAll('img.shot').length,
       pictured: row.classList.contains('pictured'),
       fact: (row.querySelector('.fact') || {}).textContent || '',
       // The picture sits beside the name, not on top of it.
